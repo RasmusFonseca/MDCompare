@@ -17,8 +17,7 @@ Additionally, a multi-flare json for comparisons using the flareplot page
 from __future__ import division
 import argparse
 import re
-import json
-from .utils.utils import *
+from utils.utils import *
 
 
 def get_write_lines(respair_to_simcond_to_data, simulation_conditions):
@@ -158,15 +157,14 @@ def extract_input_file(input_file):
     for line in matrix_lines[1:]:
         idx, simcond, path, protein = line.split(',')
         if simcond in simcond_to_id:
-            assert(idx not in simcond_to_id[simcond],
-                   "Simulation condition %s is associated with id %s multiple times" % (simcond, idx))
+            assert idx not in simcond_to_id[simcond], "Simulation condition %s is associated with id %s multiple times" % (simcond, idx)
             simcond_to_id[simcond].append(idx)
         else:
             simcond_to_id[simcond] = [idx]
         id_to_path[idx] = clean_path(path)
 
         if simcond in simcond_to_protein:
-            assert(simcond_to_protein[simcond] == protein, "%s is associated with multiple proteins" % simcond)
+            assert simcond_to_protein[simcond] == protein, "%s is associated with multiple proteins" % simcond
         else:
             simcond_to_protein[simcond] = protein
     return simcond_to_id, id_to_path, simcond_to_protein
@@ -183,8 +181,10 @@ def mdcompare():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input_file',
+                        nargs=1,
                         help="Correctly formatted .csv file of input")
     parser.add_argument('output_directory',
+                        nargs=1,
                         help="Directory for MDCompare outputs")
     parser.add_argument('-g', dest='generic_dict', nargs='?',
                         help="A correctly formatted file for standardizing residue names between different proteins.")
@@ -207,8 +207,10 @@ def mdcompare():
     # dictionary from 3-letter amino acid codes to 1-letter amino acid codes
     if should_genericize:
         protein_to_res_to_genericres = build_protein_to_res_to_genericres(generic_dict)
-        with open("./utils/seq1.json", 'r') as seq1_open:
-            seq1 = json.load(seq1_open)
+        seq1 = {"ILE": "I", "GLN": "Q", "GLY": "G", "GLU": "E", "CYS": "C", "ASP": "D", "SER": "S",
+                "HSD": "H", "LYS": "K", "PRO": "P", "HSP": "H", "ASN": "N", "VAL": "V", "THR": "T",
+                "HIS": "H", "TRP": "W", "HSE": "H", "PHE": "F", "ALA": "A", "MET": "M", "LEU": "L",
+                "ARG": "R", "TYR": "Y"}
 
     proteins_not_appearing_in_protein_to_res_to_genericres = \
         set(simcond_to_protein.values()) - set(protein_to_res_to_genericres.keys())
@@ -269,3 +271,4 @@ def mdcompare():
 
 if __name__ == '__main__':
     mdcompare()
+
