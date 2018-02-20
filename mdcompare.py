@@ -18,6 +18,7 @@ from __future__ import division
 import argparse
 import re
 from utils.utils import *
+from gen_freqs import *
 
 
 def get_write_lines(respair_to_simcond_to_data, simulation_conditions):
