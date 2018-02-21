@@ -1,5 +1,6 @@
+#!/usr/bin/env python
 """
-gen_freqs determines the frequencies of residue pair contacts in 
+Determines the frequencies of residue pair contacts in
 molecular dynamics simulations. Given one or more MDContact outputs,
 this script determines the frequency of each unique interaction of the
 form (itype, residue 1, residue2), weighted by number of frames,
@@ -8,30 +9,33 @@ across all inputs.
 The inputs are one or more MDContact output file paths as well as an
 output path. The user may also specify a subset of interaction types
 to compute frequencies for. The user may additionally provide a label
-file to convert residue labelings into a generic nomeclature.
+file to convert residue labelings (typically for the use of aligning
+sequences for performing frequency comparisons with other trajectories).
 
-The output is a single tsv file comparing (itype, residue1, residue2)
-instances (rows) to their corresponding frequencies.
+The output is a single tsv file with each row indicating interaction
+type, residue id 1, residue id 2, and contact frequency.
 
-Sample input:
-$ python gen_freqs.py output_path.tsv input_path1.tsv [input_path2.tsv
-[input_path3.tsv [...]]] -label label.csv -hb -sb -vdw
+Usage:
+    gen_freqs.py output_path.tsv input_path1.tsv [input_path2.tsv
+        [input_path3.tsv [...]]] -label label.csv -hb -sb -vdw
 """
 
 from __future__ import division
 from utils.utils import *
-import json
 import sys
 import argparse
+
 
 def get_res(atom):
     return ':'.join(atom.split(':')[1:3])
 
-def gen_freqs(input_files, itype_subset=('hbbb', 'hbsb', 'hbss', 'sb',
-    'pc', 'ps', 'ts', 'vdw', 'wb', 'wb2', 'hlb'), label=None):
-    data = {'total_frames':0, 'itypes':{}}
+
+def gen_freqs(input_files,
+              itype_subset=('hbbb', 'hbsb', 'hbss', 'sb', 'pc', 'ps', 'ts', 'vdw', 'wb', 'wb2', 'hlb'),
+              label=None):
+    data = {'total_frames': 0, 'itypes': {}}
     for itype in itype_subset:
-        data['itypes'][itype] = {'contacts':{}}
+        data['itypes'][itype] = {'contacts': {}}
 
     for input_file in input_files:
         seen_contacts = set()
@@ -58,18 +62,19 @@ def gen_freqs(input_files, itype_subset=('hbbb', 'hbsb', 'hbss', 'sb',
 
     return data
 
+
 def main(args):
     # Parse command line arguments
     parser = argparse.ArgumentParser(description=__doc__,
-        formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('output_file',
-                        nargs=1,
-                        help="Path to gen_freqs output")
-    parser.add_argument('input_files',
+                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('--input_files',
                         nargs='+',
                         help="Path to one or more MDContact outputs")
     parser.add_argument('--label', dest='label_file', nargs='?',
-                        help="A correctly formatted label file for standardizing residue names between different proteins")
+                        help="A label file for standardizing residue names between different proteins")
+    parser.add_argument('--output_file',
+                        nargs=1,
+                        help="Path to gen_freqs output")
 
     # Adapted from MDContactNetworks (https://github.com/akma327/MDContactNetworks)
     class ITypeAction(argparse.Action):
@@ -109,12 +114,13 @@ def main(args):
 
     data = gen_freqs(input_files, itypes, label)
 
-    with open(output_file, 'w+') as w_open:
+    with open(output_file, 'w') as w_open:
         w_open.write('#\ttotal_frames:%d\tinteraction_types:%s\n' % (data['total_frames'], ','.join(itypes)))
         w_open.write('#\tColumns:\titype\tresidue_1,\tresidue_2[,\tresidue_3[,\tresidue_4]\tnum_frames\n')
         for itype in data['itypes']:
             for contact in data['itypes'][itype]['contacts']:
                 w_open.write('%s\n' % '\t'.join([itype] + list(contact) + [str(data['itypes'][itype]['contacts'][contact])]))
+
 
 if __name__ == '__main__':
     main(sys.argv)

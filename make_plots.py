@@ -5,6 +5,7 @@ import sys
 import os
 import errno
 
+
 def open_dir(dir_name):
     try:
         os.makedirs(dir_name)
@@ -12,13 +13,16 @@ def open_dir(dir_name):
         if e.errno != errno.EEXIST:
             raise
 
+
 def clean_path(path):
     if path[-1] != '/':
         path += '/'
     return path
 
+
 def listdir_files(path):
     return [path + filename for filename in os.listdir(path) if os.path.isfile(path + filename)]
+
 
 def main(argv):
     compiled_path = './MuscarinicReceptors_analysis/M5R_analysis/MDCompare_outputs/'

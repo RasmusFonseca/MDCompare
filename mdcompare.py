@@ -189,12 +189,11 @@ def mdcompare():
                         help="Directory for MDCompare outputs")
     parser.add_argument('-g', dest='generic_dict', nargs='?',
                         help="A correctly formatted file for standardizing residue names between different proteins.")
-    results = parser.parse_args()
-    input_file = results.input_file[0]
-    output_directory = clean_path(results.output_directory[0])
-    generic_dict = results.generic_dict
+    arguments = parser.parse_args()
+    input_file = arguments.input_file[0]
+    output_directory = clean_path(arguments.output_directory[0])
+    generic_dict = arguments.generic_dict
 
-    open_dir(output_directory)
     simcond_to_id, id_to_path, simcond_to_protein = extract_input_file(input_file)
     should_genericize = generic_dict is not None
 
@@ -240,6 +239,7 @@ def mdcompare():
 
     simulation_conditions = sorted(simcond_to_inttype_to_respair_to_data.keys())
     inttype_to_respair_to_simcond_to_data = {}
+    open_dir(output_directory)
     for inttype in interactions_to_study:
         respair_to_simcond_to_data = {}
         for simcond in simcond_to_inttype_to_respair_to_data:
