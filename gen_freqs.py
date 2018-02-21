@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-Determines the frequencies of residue pair contacts in
-molecular dynamics simulations. Given one or more MDContact outputs,
-this script determines the frequency of each unique interaction of the
+Determines the frequencies of residue pair contacts in molecular
+dynamics simulations. Given one or more MDContact outputs, this
+script determines the frequency of each unique interaction of the
 form (itype, residue 1, residue2), weighted by number of frames,
 across all inputs.
 
@@ -10,70 +10,181 @@ The inputs are one or more MDContact output file paths as well as an
 output path. The user may also specify a subset of interaction types
 to compute frequencies for. The user may additionally provide a label
 file to convert residue labelings (typically for the use of aligning
-sequences for performing frequency comparisons with other trajectories).
+sequences for performing frequency comparisons with other
+trajectories).
 
-The output is a single tsv file with each row indicating interaction
-type, residue id 1, residue id 2, and contact frequency.
-
-Usage:
-    gen_freqs.py output_path.tsv input_path1.tsv [input_path2.tsv
-        [input_path3.tsv [...]]] -label label.csv -hb -sb -vdw
+The output is a single tsv file with each row indicating residue
+id 1, residue id 2, and contact frequency.
 """
 
 from __future__ import division
-from utils.utils import *
+from collections import defaultdict
 import sys
 import argparse
 
 
-def get_res(atom):
-    return ':'.join(atom.split(':')[1:3])
+def atomid_to_resid(atom):
+    return atom[0:atom.rfind(":")]
+    # return ':'.join(atom.split(':')[1:3])
 
 
-def gen_freqs(input_files,
-              itype_subset=('hbbb', 'hbsb', 'hbss', 'sb', 'pc', 'ps', 'ts', 'vdw', 'wb', 'wb2', 'hlb'),
-              label=None):
-    data = {'total_frames': 0, 'itypes': {}}
-    for itype in itype_subset:
-        data['itypes'][itype] = {'contacts': {}}
+def gen_counts(input_lines, interaction_types, residuelabels=None):
+    """
+    Parse each line in `input_lines` as a line from MDContacts and return interaction-counts for each residue pair. If
+    `residuelabels` is defined it is used to modify residue identifiers and to filter out residues not indicated.
 
-    for input_file in input_files:
-        seen_contacts = set()
-        input_matrix = parse_matrix(input_file)
-        header_line = input_matrix[0][0].split()
-        num_frames_token = header_line[1]
-        num_frames = int(num_frames_token.split(':')[1])
-        data['total_frames'] += num_frames
-        for input_line in input_matrix[2:]:
-            frame = input_line[0]
-            itype = input_line[1]
-            atoms = input_line[2:]
-            contact = tuple([get_res(atom) for atom in atoms])
+    For example:
+        inputs = [
+            "# total_frames: 3",
+            "\t".join(["0", "hbbb", "A:ALA:1:N", "A:ARG:4:O"]),
+            "\t".join(["0", "vdw", "A:ALA:1:CB", "A:ARG:4:CA"]),
+            "\t".join(["1", "vdw", "A:ALA:1:N", "A:CYS:5:CA"]),
+            "\t".join(["2", "hbbb", "A:THR:2:N", "A:CYS:5:O"]),
+            "\t".join(["2", "hbss", "A:ALA:1:N", "A:CYS:5:O"])
+        ]
+        labels = {"A:ALA:1": "A1", "A:ARG:4": "R4", "A:CYS:5": "C5"}
 
-            if itype not in itype_subset or (frame, contact) in seen_contacts:
+        # Only consider hbbb and vdw, filter away THR, and map to single-letter labels
+        gen_freqs(inputs, ["hbbb", "vdw"], labels)
+        #  Returns: { ("A1", "R4"): 1, ("A1", "C5"): 1 }
+
+    Parameters
+    ----------
+    input_lines: Iterable[str]
+        Interactions formatted as MDContacts output, e.g. ["0\thbbb\tA:ALA:1:N\tA:ARG:4:H", ...]
+    interaction_types: list of str
+        Which interaction types to consider
+    residuelabels: dict of (str: str)
+        Remaps and filters residuelabels, e.g. {"A:ARG:4": "R4"}
+
+    Returns
+    -------
+    (int, dict of (str, str): int)
+        Total frame-count and mapping of residue-residue interactions to frame-count
+    """
+    # Maps residue pairs to set of frames in which they're present
+    rescontact_frames = defaultdict(set)
+    total_frames = 0
+
+    for line in input_lines:
+        line = line.strip()
+        if "total_frames" in line:
+            tokens = line.split(" ")
+            total_frames = int(tokens[1][tokens[1].find(":")+1])
+
+        if len(line) == 0 or line[0] == "#":
+            continue
+
+        tokens = line.split("\t")
+
+        # Check that the interaction type is specified
+        itype = tokens[1]
+        if itype not in interaction_types:
+            continue
+
+        frame = int(tokens[0])
+        res1 = atomid_to_resid(tokens[2])
+        res2 = atomid_to_resid(tokens[3])
+
+        # Change residue id according to `residuelabels` or skip if any of the residues are not present
+        if residuelabels is not None:
+            if res1 not in residuelabels or res2 not in residuelabels:
                 continue
+            res1 = residuelabels[res1]
+            res2 = residuelabels[res2]
 
-            seen_contacts.add((frame, contact))
+        # Ensure lexicographical order of residue names
+        if res2 < res1:
+            res1, res2 = res2, res1
 
-            if contact in data['itypes'][itype]['contacts']:
-                data['itypes'][itype]['contacts'][contact] += 1
-            else:
-                data['itypes'][itype]['contacts'][contact] = 1
+        rescontact_frames[(res1, res2)].add(frame)
 
-    return data
+    # Insted of returning list of frames for each interaction, only return number of frames
+    rescontact_counts = {(res1, res2): len(frames) for (res1, res2), frames in rescontact_frames.items()}
+    return total_frames, rescontact_counts
+
+
+def parse_labelfile(label_file):
+    """
+    Parses a label-file and returns a dictionary with the residue label mappings. Unless prepended with a comment-
+    indicator (#), each line is assumed to have a valid residue identifier (e.g. "A:ALA:1") and a label which the
+    residue should be mapped to (e.g. "A1").
+
+    Example:
+        parse_labelfile(["A:ALA:1\tA1")
+        # Returns {"A:ALA:1": "A1"}
+
+    Parameters
+    ----------
+    label_file: Iterable[str]
+        Lines with tab-separated residue identifier and label
+
+    Returns
+    -------
+    dict of str: str
+        Mapping from residue-id in contact-file to label of any format
+
+    """
+    ret = {}
+    for line in label_file:
+        line = line.strip()
+        # Ignore line if empty or comment
+        if line[0] == "#" or len(line) == 0:
+            continue
+
+        tokens = line.split("\t")
+        ret[tokens[0]] = tokens[1]
+
+    return ret
+
+
+def gen_frequencies(count_list):
+    """
+    Take a list of residue contact counts (see output of `gen_counts`) and compute frequencies
+
+    Parameters
+    ----------
+    count_list: list of (int, dict of (str, str): int)
+        List with individual frame counts and dictionaries mapping residue pairs to frame-counts
+
+    Return
+    ------
+    dict of (str, str): (int, float)
+    """
+    rescontact_count = defaultdict(int)
+    total_frames = 0
+    for frames, rescount_dict in count_list:
+        total_frames += frames
+
+        for (res1, res2), count in rescount_dict.items():
+            rescontact_count[(res1, res2)] += count
+
+    respair_freqs = {respair: (count, float(count) / total_frames) for respair, count in rescontact_count.items()}
+    return total_frames, respair_freqs
 
 
 def main(args):
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawTextHelpFormatter)
+    class MyParser(argparse.ArgumentParser):
+        def error(self, message):
+            self.print_help(sys.stderr)
+            sys.stderr.write('\nError: %s\n' % message)
+            sys.exit(2)
+
+    parser = MyParser(description=__doc__,
+                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--input_files',
+                        type=argparse.FileType('r'),
+                        required=True,
                         nargs='+',
                         help="Path to one or more MDContact outputs")
-    parser.add_argument('--label', dest='label_file', nargs='?',
+    parser.add_argument('--labels',
+                        type=argparse.FileType('r'),
+                        required=False,
                         help="A label file for standardizing residue names between different proteins")
     parser.add_argument('--output_file',
-                        nargs=1,
+                        type=argparse.FileType('w'),
+                        required=True,
                         help="Path to gen_freqs output")
 
     # Adapted from MDContactNetworks (https://github.com/akma327/MDContactNetworks)
@@ -84,42 +195,51 @@ def main(args):
             if not hasattr(ns, "itypes"):
                 ns.itypes = set()
             ns.itypes.add(self.dest)
-    parser.add_argument('--salt-bridge', '-sb', dest='sb', action=ITypeAction, nargs=0, help="Compute salt bridge interactions")
-    parser.add_argument('--pi-cation', '-pc', dest='pc', action=ITypeAction, nargs=0, help="Compute pi-cation interactions")
-    parser.add_argument('--pi-stacking', '-ps', dest='ps', action=ITypeAction, nargs=0, help="Compute pi-stacking interactions")
-    parser.add_argument('--t-stacking', '-ts', dest='ts', action=ITypeAction, nargs=0, help="Compute t-stacking interactions")
-    parser.add_argument('--vanderwaals', '-vdw', dest='vdw', action=ITypeAction, nargs=0, help="Compute van der Waals interactions (warning: there will be many)")
-    parser.add_argument('--hbond-backbone-backbone', '-hbbb', dest='hbbb', action=ITypeAction, nargs=0, help="Compute hydrogen bond backbone backbone interactions")
-    parser.add_argument('--hbond-backbone-sidechain', '-hbsb', dest='hbsb', action=ITypeAction, nargs=0, help="Compute hydrogen bond backbone sidechain interactions")
-    parser.add_argument('--hbond-sidechain-sidechain', '-hbss', dest='hbss', action=ITypeAction, nargs=0, help="Compute hydrogen bond sidechain sidechain interactions")
-    parser.add_argument('--ligand-hbond', '-lhb', dest='lhb', action=ITypeAction, nargs=0, help="Compute ligand hydrogen bond interactions")
-    parser.add_argument('--all-interactions', '-all', dest='all', action='store_true', help="Compute all types of interactions")
+    parser.add_argument('--salt-bridge', '-sb', dest='sb', action=ITypeAction, nargs=0,
+                        help="Compute salt bridge interactions")
+    parser.add_argument('--pi-cation', '-pc', dest='pc', action=ITypeAction, nargs=0,
+                        help="Compute pi-cation interactions")
+    parser.add_argument('--pi-stacking', '-ps', dest='ps', action=ITypeAction, nargs=0,
+                        help="Compute pi-stacking interactions")
+    parser.add_argument('--t-stacking', '-ts', dest='ts', action=ITypeAction, nargs=0,
+                        help="Compute t-stacking interactions")
+    parser.add_argument('--vanderwaals', '-vdw', dest='vdw', action=ITypeAction, nargs=0,
+                        help="Compute van der Waals interactions (warning: there will be many)")
+    parser.add_argument('--hbond-backbone-backbone', '-hbbb', dest='hbbb', action=ITypeAction, nargs=0,
+                        help="Compute hydrogen bond backbone backbone interactions")
+    parser.add_argument('--hbond-backbone-sidechain', '-hbsb', dest='hbsb', action=ITypeAction, nargs=0,
+                        help="Compute hydrogen bond backbone sidechain interactions")
+    parser.add_argument('--hbond-sidechain-sidechain', '-hbss', dest='hbss', action=ITypeAction, nargs=0,
+                        help="Compute hydrogen bond sidechain sidechain interactions")
+    parser.add_argument('--ligand-hbond', '-lhb', dest='lhb', action=ITypeAction, nargs=0,
+                        help="Compute ligand hydrogen bond interactions")
+    parser.add_argument('--all-interactions', '-all', dest='all', action='store_true',
+                        help="Compute all types of interactions")
 
-    results, unknown = parser.parse_known_args()
+    # results, unknown = parser.parse_known_args()
+    args = parser.parse_args()
 
-    # Get itypes from command line
-    if results.all:
+    # Get itypes from command line and exit if none are specified
+    if args.all:
         itypes = ["sb", "pc", "ps", "ts", "vdw", "hbss", "lhb", 'hbsb', 'hbbb']
-    elif not hasattr(results, "itypes"):
-        print("Error: at least one interaction type or '--all-interactions' is required")
-        exit(1)
+    elif not hasattr(args, "itypes"):
+        parser.print_help(sys.stderr)
+        print("Error: at least one interaction type or '-all' is required")
+        sys.exit(2)
     else:
-        itypes = results.itypes
+        itypes = args.itypes
 
-    output_file = results.output_file[0]
-    input_files = results.input_files
-    label = None
-    if results.label_file is not None:
-        label = results.label_file[0]
+    output_file = args.output_file
+    input_files = args.input_files
+    labels = parse_labelfile(args.labels) if args.labels else None
 
-    data = gen_freqs(input_files, itypes, label)
+    counts = [gen_counts(input_file, itypes, labels) for input_file in input_files]
+    total_frames, frequencies = gen_frequencies(counts)
 
-    with open(output_file, 'w') as w_open:
-        w_open.write('#\ttotal_frames:%d\tinteraction_types:%s\n' % (data['total_frames'], ','.join(itypes)))
-        w_open.write('#\tColumns:\titype\tresidue_1,\tresidue_2[,\tresidue_3[,\tresidue_4]\tnum_frames\n')
-        for itype in data['itypes']:
-            for contact in data['itypes'][itype]['contacts']:
-                w_open.write('%s\n' % '\t'.join([itype] + list(contact) + [str(data['itypes'][itype]['contacts'][contact])]))
+    output_file.write('#\ttotal_frames:%d\tinteraction_types:%s\n' % (total_frames, ','.join(itypes)))
+    output_file.write('#\tColumns:\tresidue_1,\tresidue_2\tframe_count\tcontact_frequency\n')
+    for (res1, res2), (count, frequency) in frequencies.items():
+        output_file.write('\t'.join([res1, res2, str(count), "%.3f" % frequency]) + "\n")
 
 
 if __name__ == '__main__':
