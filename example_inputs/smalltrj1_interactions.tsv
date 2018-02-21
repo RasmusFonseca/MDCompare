@@ -1,0 +1,8 @@
+# total_frames:3 interaction_types:hbbb
+# Columns: frame, interaction_type, atom_1, atom_2[, atom_3[, atom_4]]
+0	hbbb	A:ALA:1:N	A:CYS:3:O
+1	hbbb	A:ALA:1:N	A:CYS:3:O
+1	hbbb	A:ALA:1:N	A:MET:2:O
+1	hbbb	A:MET:2:O	A:CYS:3:N
+2	hbbb	A:ALA:1:N	A:CYS:3:O
+2	hbbb	A:ALA:1:O	A:MET:2:N
