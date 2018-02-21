@@ -176,6 +176,7 @@ def main():
     # Parse command line arguments
     class MyParser(argparse.ArgumentParser):
         def error(self, message):
+            # Prints full program help when error occurs
             self.print_help(sys.stderr)
             sys.stderr.write('\nError: %s\n' % message)
             sys.exit(2)
