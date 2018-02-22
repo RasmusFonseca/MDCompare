@@ -140,7 +140,15 @@ def parse_labelfile(label_file):
 
 def gen_frequencies(count_list):
     """
-    Take a list of residue contact counts (see output of `gen_counts`) and compute frequencies
+    Take a list of residue contact counts (see output of `gen_counts`) and compute total counts and frequencies.
+
+    Example:
+        clist = [
+            (4, {("A1", "R4"): 4, ("A1", "C5"): 3}),  # First simulation has 4 frames and two contacts
+            (3, {("A1", "R4"): 2})                    # Second simulation has 3 frames and one contact
+        ]
+        gen_frequencies(clist)
+        # Returns: (7, {("A1", "R4"): (6, 0.857), ("A1", "C5"): (3, 0.429)})
 
     Parameters
     ----------
@@ -149,7 +157,8 @@ def gen_frequencies(count_list):
 
     Return
     ------
-    dict of (str, str): (int, float)
+    (int, dict of (str, str): (int, float))
+        Total framecount and mapping of residue ID pairs to the number of frames in which they contact and the frequency
     """
     rescontact_count = defaultdict(int)
     total_frames = 0
@@ -163,10 +172,11 @@ def gen_frequencies(count_list):
     return total_frames, respair_freqs
 
 
-def main(args):
+def main():
     # Parse command line arguments
     class MyParser(argparse.ArgumentParser):
         def error(self, message):
+            # Prints full program help when error occurs
             self.print_help(sys.stderr)
             sys.stderr.write('\nError: %s\n' % message)
             sys.exit(2)
@@ -243,4 +253,4 @@ def main(args):
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()

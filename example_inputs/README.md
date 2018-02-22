@@ -9,12 +9,21 @@ To compute the average residue frequency across both simulations (for instance i
                 -all \
                 --output_file bothtrj_frequencies.tsv
 ```
-The output-file will contain
-```
-#	total_frames:6	interaction_types:sb,pc,ps,ts,vdw,hbss,lhb,hbsb,hbbb
-#	Columns:	residue_1,	residue_2	frame_count	contact_frequency
-A1	C3	6	1.000
-A1	M2	4	0.667
-C3	M2	1	0.167
-```
 
+To compare residue interaction frequencies between the two trajectories, run
+```bash
+../gen_freqs.py --input_files smalltrj1_interactions.tsv \
+                --labels smalltrj_labels.tsv \
+                -all \
+                --output_file smalltrj1_resfreqs.tsv
+
+../gen_freqs.py --input_files smalltrj2_interactions.tsv \
+                --labels smalltrj_labels.tsv \
+                -all \
+                --output_file smalltrj2_resfreqs.tsv
+
+../group_freqs.py --input_frequencies smalltrj1_resfreqs.tsv smalltrj2_resfreqs.tsv \
+                  --table_output smalltrj_comparefreqs.tsv \
+                  --plot_output smalltrj_comparefreqs.png
+```
+and then inspect the two output-files with a system viewer. If no `--plot_output` is specified the fingerprint heatmap will show up on screen.
