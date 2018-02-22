@@ -70,7 +70,7 @@ def gen_counts(input_lines, interaction_types, residuelabels=None):
         line = line.strip()
         if "total_frames" in line:
             tokens = line.split(" ")
-            total_frames = int(tokens[1][tokens[1].find(":")+1])
+            total_frames = int(tokens[1][tokens[1].find(":")+1:])
 
         if len(line) == 0 or line[0] == "#":
             continue
