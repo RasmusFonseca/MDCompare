@@ -30,6 +30,10 @@ def parse_frequencyfiles(freq_files):
 
             ret[(res1, res2)][fidx] = freq
 
+    for key in ret:
+        if np.amax(ret[key]) < 0.1:
+            del ret[key]
+
     return ret
 
 
@@ -44,7 +48,7 @@ def plot_frequencies(freq_table, col_labels, out_file):
     import pandas as pd
     import matplotlib
     import os
-    if os.environ["DISPLAY"] ':0.0'
+    if "DISPLAY" not in os.environ:
         matplotlib.use('agg')
     import seaborn as sns; sns.set(color_codes=True)
     
@@ -58,7 +62,6 @@ def plot_frequencies(freq_table, col_labels, out_file):
         fingerprints.savefig(out_file)
         print("Wrote fingerprint heatmap to "+out_file)
     else:
-        #import matplotlib.pyplot as plt
         import pylab as plt
         plt.show()
 
