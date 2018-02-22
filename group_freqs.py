@@ -30,10 +30,8 @@ def parse_frequencyfiles(freq_files):
 
             ret[(res1, res2)][fidx] = freq
 
-    for key in ret:
-        if np.amax(ret[key]) < 0.1:
-            del ret[key]
-
+    # Remove entries where no frequency exceeds 0.6
+    ret = { key: val for key, val in ret.items() if np.amax(val)>0.6 }
     return ret
 
 
@@ -50,13 +48,14 @@ def plot_frequencies(freq_table, col_labels, out_file):
     import os
     if "DISPLAY" not in os.environ:
         matplotlib.use('agg')
-    import seaborn as sns; sns.set(color_codes=True)
+    import seaborn as sns; 
+    sns.set(color_codes=True)
+    sns.set(font_scale=0.5)
     
     freq_matrix = np.array([freq_table[(r1, r2)] for (r1, r2) in freq_table])
     row_labels = [r1 + " - " + r2 for (r1, r2) in freq_table]
     pdframe = pd.DataFrame(freq_matrix, index=row_labels, columns=col_labels)
-    print(pdframe)
-    fingerprints = sns.clustermap(pdframe)
+    fingerprints = sns.clustermap(pdframe, figsize=(10,20), cmap='Blues')
 
     if out_file is not None:
         fingerprints.savefig(out_file)
